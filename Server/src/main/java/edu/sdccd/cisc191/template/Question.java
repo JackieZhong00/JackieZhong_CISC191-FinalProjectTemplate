@@ -1,6 +1,11 @@
 package edu.sdccd.cisc191.template;
 
-public class Question {
+import java.io.Serializable;
+
+/**
+ * class that represents what a question object should contain
+ */
+public class Question implements Serializable {
     private String question;
     private String answer;
 
