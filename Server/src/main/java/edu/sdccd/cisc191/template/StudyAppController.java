@@ -1,5 +1,5 @@
 package edu.sdccd.cisc191.template;
-
+import java.sql.*;
 import java.io.*;
 import java.util.*;
 
@@ -7,21 +7,72 @@ import java.util.*;
  * contains logic that does not depend on GUI components
  */
 public class StudyAppController {
-    public TreeMap<String, ArrayList<Question>> questionsMap = new TreeMap<>();
+    public HashMap<String, ArrayList<Question>> questionsMap = new HashMap<>();
+    public QuestionsLinkedList newlyAddedQuestions = new QuestionsLinkedList();
+    public Question questionToImmediatelyAdd;
+    public Question[] sortedList;
+    public ArrayList<Question> topicSpecificList;
+    public int sortedListIndex = 0;
     private String message = "";
+    public boolean sortedScroll = false;
+    public boolean sortedTopicScroll = false;
 
-    public TreeMap<String, ArrayList<Question>> getQuestionsMap() {
+    /**
+     * @return returns the entire hashmap, keys = topics, arraylist of questions = questions
+     */
+    public HashMap<String, ArrayList<Question>> getQuestionsMap() {
         return questionsMap;
     }
 
+    /**
+     * @param message to set to a current question/answer
+     */
     public void setMessage(String message) {
         this.message = message;
     }
 
+    /**
+     * method to toggle sorted scroll
+     */
+    public void toggleSortedScroll() {
+        this.sortedScroll = !this.sortedScroll;
+        if (this.sortedScroll) {
+            topicSortedQuestions();
+        }
+    }
+
+    /**
+     * @return message that current question should hold
+     */
     public String getMessage() {
         return message;
     }
 
+    /**
+     * use stream to assign to sortedList instance variable of this controller
+     * to array of questions organized in alphabetical order of their topics
+     */
+    public void topicSortedQuestions() {
+        sortedList = questionsMap.values().stream().flatMap(Collection::stream)
+                .toArray(Question[]::new);
+    }
+
+
+    /**
+     * generates next question when in sort mode
+     * @return question that is next is topic sorted order
+     */
+    public Question nextSortedQuestion() {
+        if (this.sortedListIndex < this.sortedList.length) {
+            Question question = this.sortedList[this.sortedListIndex];
+            this.sortedListIndex ++;
+            return question;
+        }
+        else {
+            this.sortedListIndex = 0;
+            return this.sortedList[0];
+        }
+    }
     /**
      * reads file line by line to extract questions/answers and to categorize each question under specific topic
      * @param file takes in file that the function is supposed to read from
@@ -86,8 +137,14 @@ public class StudyAppController {
             //generate random number based on size of ArrayList to pick random key
             String key = keyList.get(random.nextInt(keyList.size()));
             ArrayList<Question> questions = questionsMap.get(key);
+            if(!questions.isEmpty()) {
+                return questions.get(random.nextInt(questions.size()));
+            }
+            else {
+                System.out.println("Question list is empty");
+                return null;
+            }
             //return random question based on size of ArrayList associated with key
-            return questions.get(random.nextInt(questions.size()));
         }
         else {
             return null;
@@ -105,6 +162,7 @@ public class StudyAppController {
         }
     }
 
+
     /**
      * deserialize questionsMap from specified file using Java's default serialization
      * @param filename deserialize and load info from this file
@@ -114,8 +172,99 @@ public class StudyAppController {
      */
     public void loadQuestionsMapFromFile(String filename) throws IOException, ClassNotFoundException {
         try (ObjectInputStream input = new ObjectInputStream(new FileInputStream(filename))) {
-            questionsMap = (TreeMap<String, ArrayList<Question>>) input.readObject();}
+            questionsMap = (HashMap<String, ArrayList<Question>>) input.readObject();}
     }
+
+    /**
+     * saves newly added question immediately to database
+     */
+    public void saveOneQuestionToDatabase() {
+        String insertSQL = "INSERT INTO StudyQuestions (Topic, Question, Answer) VALUES (?, ?, ?)";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
+
+            // Set the values for the SQL query
+            preparedStatement.setString(1, questionToImmediatelyAdd.getTopic());
+            preparedStatement.setString(2, questionToImmediatelyAdd.getQuestion());
+            preparedStatement.setString(3, questionToImmediatelyAdd.getAnswer());
+
+            // Execute the insert operation
+            int rowsInserted = preparedStatement.executeUpdate();
+
+            if (rowsInserted > 0) {
+                System.out.println("A new question was inserted successfully!");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * save all questions in hashmap to database - only used when new file is submitted
+     */
+    public void saveQuestionsToDatabase() {
+        String insertSQL = "INSERT INTO StudyQuestions (Topic, Question, Answer) VALUES (?, ?, ?)";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
+
+            // Iterate over the questionsMap
+            for (Map.Entry<String, ArrayList<Question>> entry : questionsMap.entrySet()) {
+                String topic = entry.getKey();
+                ArrayList<Question> questions = entry.getValue();
+
+                // Insert each question under the current topic
+                for (Question question : questions) {
+                    preparedStatement.setString(1, topic);
+                    preparedStatement.setString(2, question.getQuestion());
+                    preparedStatement.setString(3, question.getAnswer());
+                    preparedStatement.addBatch();  // Add to batch
+                }
+            }
+
+            // Execute batch insert
+            preparedStatement.executeBatch();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * fetches questions from database and inputs questions into hashmap
+     */
+    public void getQuestionsFromDb() {
+        String selectSQL = "SELECT Topic, Question, Answer FROM StudyQuestions";
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(selectSQL);
+             ResultSet resultSet = preparedStatement.executeQuery()) {
+
+            // Clear the current map to avoid duplication
+            questionsMap.clear();
+
+            // Iterate through the ResultSet
+            while (resultSet.next()) {
+                String topic = resultSet.getString("Topic");
+                String questionText = resultSet.getString("Question");
+                String answerText = resultSet.getString("Answer");
+
+                // Create a new Question object
+                Question question = new Question(questionText, answerText);
+
+                // Check if the topic already exists in the map
+                if (!questionsMap.containsKey(topic)) {
+                    questionsMap.put(topic, new ArrayList<>());
+                }
+
+                // Add the question to the corresponding topic list
+                questionsMap.get(topic).add(question);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
 }
 
 

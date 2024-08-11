@@ -1,14 +1,21 @@
 package edu.sdccd.cisc191;
 
 import edu.sdccd.cisc191.template.Question;
+import edu.sdccd.cisc191.template.QuestionsLinkedList;
 import edu.sdccd.cisc191.template.StudyAppController;
+import edu.sdccd.cisc191.template.TopicDisplayCallable;
+import javafx.scene.control.TextField;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -73,7 +80,59 @@ public class TestApplication {
         assertEquals("What is the dependency array of useEffect used for?", logic.questionsMap.get("React").get(1).getQuestion());
         assertEquals("upon values changing, useEffect's assigned function is called", logic.questionsMap.get("React").get(1).getAnswer());
     }
+    //test linkedlist's add functionality, which prepends to linkedlist
+    @Test public void testLinkedList(){
+        QuestionsLinkedList questionsList = new QuestionsLinkedList();
+        Question q1 = new Question("test1", "test1");
+        Question q2 = new Question("test2", "test2");
+        Question q3 = new Question("test3", "test3");
+        questionsList.add(q1);
+        assertEquals(0,questionsList.getIndexOfQuestion(q1));
+        questionsList.add(q2);
+        assertEquals(0,questionsList.getIndexOfQuestion(q2));
+        questionsList.add(q3);
+        assertEquals(0,questionsList.getIndexOfQuestion(q3));
+        assertEquals(2,questionsList.getIndexOfQuestion(q1));
+        assertEquals(1,questionsList.getIndexOfQuestion(q2));
+        assertEquals(0,questionsList.getIndexOfQuestion(q3));
+    }
 
+    //test to see if storing item into db then fetching from db, will return the correct object
+    @Test
+    public void testDbFetch() {
+        StudyAppController logic = new StudyAppController();
+        ArrayList<Question> questions = new ArrayList<>();
+        Question q1 = new Question("test1", "test1");
+        questions.add(q1);
+        logic.questionsMap.put("testingDb",questions);
+        logic.saveQuestionsToDatabase();
+        logic.getQuestionsFromDb();
+        assertTrue(logic.questionsMap.containsKey("testingDb"));
+        assertEquals("test1", logic.questionsMap.get("testingDb").get(0).getQuestion());
+    }
+
+
+    //test if stream function returns the correctly sorted array after applying flatMap to the stream
+    @Test
+    public void testStream() {
+        StudyAppController logic = new StudyAppController();
+        ArrayList<Question> questions1 = new ArrayList<>();
+        ArrayList<Question> questions2 = new ArrayList<>();
+        ArrayList<Question> questions3 = new ArrayList<>();
+        Question q1 = new Question("test1", "test1");
+        Question q2 = new Question("test2", "test2");
+        Question q3 = new Question("test3", "test3");
+        questions1.add(q1);
+        questions2.add(q2);
+        questions3.add(q3);
+        logic.questionsMap.put("AtestingDb",questions1);
+        logic.questionsMap.put("BtestingDb2",questions2);
+        logic.questionsMap.put("CtestingDb3",questions3);
+        logic.topicSortedQuestions();
+        assertEquals("test1",logic.sortedList[0].getQuestion());
+        assertEquals("test2",logic.sortedList[1].getQuestion());
+        assertEquals("test3",logic.sortedList[2].getQuestion());
+    }
     //test to see if mock data is equal to deserialized data upon loading,
     // after serializing and saving mock data to file
     @Test
